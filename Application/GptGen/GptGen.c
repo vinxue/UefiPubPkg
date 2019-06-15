@@ -277,7 +277,7 @@ GptNew (
 
   IsRandom = GetRandomNumber128 (TempRand);
   if (IsRandom) {
-    DEBUG ((DEBUG_INFO, "IsRandom: %d, TempRand[1]: %lx, TempRand[2]: %lx\n", IsRandom, TempRand[0], TempRand[1]));
+    DEBUG ((DEBUG_INFO, "IsRandom: %d, TempRand[0]: %lx, TempRand[1]: %lx\n", IsRandom, TempRand[0], TempRand[1]));
     PartHdr->DiskGUID.Data1 = (UINT32) TempRand[0];
     PartHdr->DiskGUID.Data2 = (UINT16) RShiftU64 (TempRand[0], 32);
     PartHdr->DiskGUID.Data3 = (((UINT16) RShiftU64 (TempRand[0], 48)) & 0x0FFF) | 0x4000;  // version 4 : random generation
@@ -292,7 +292,6 @@ GptCheckPartitionList (
   IN PARTITON_DATA      *PartData,
   IN GPT_BIN_PART       *Gbp,
   IN UINT32             PartCount
-
   )
 {
   UINTN         Index;
@@ -757,26 +756,39 @@ ShellAppMain (
     return EFI_INVALID_PARAMETER;
   }
 
+  mPartData = AllocateZeroPool (sizeof (PARTITON_DATA));
+  if (mPartData == NULL) {
+    DEBUG ((DEBUG_ERROR, "Fail to allocate the partition data.\n"));
+    return EFI_OUT_OF_RESOURCES;
+  }
+
   Status = InitDevicePath ();
   if (EFI_ERROR (Status)) {
     Print (L"InitDevicePath failed.\n");
+    FreePool (mPartData);
     return Status;
   }
 
   Status = ReadFileFromDisk (Argv[2], &BufferSize, &Buffer);
   if (EFI_ERROR (Status)) {
     Print (L"Read GPT metadata failed. %r\n", Status);
+    FreePool (mPartData);
     return Status;
   }
 
   Status = FlashGpt (mPartData, Buffer, BufferSize);
   if (EFI_ERROR (Status)) {
     Print (L"FlashGpt failed. %r\n", Status);
+    FreePool (mPartData);
     return Status;
   }
 
   if (Buffer != NULL) {
     FreePool (Buffer);
+  }
+
+  if (mPartData != NULL) {
+    FreePool (mPartData);
   }
 
   return 0;
