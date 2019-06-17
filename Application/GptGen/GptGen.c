@@ -154,6 +154,36 @@ SaveFileToDisk (
   return EFI_SUCCESS;
 }
 
+BOOLEAN
+EFIAPI
+IsUsbDevice (
+  IN EFI_DEVICE_PATH_PROTOCOL   *DevicePath
+  )
+{
+  EFI_DEVICE_PATH_PROTOCOL  *TempDevicePath;
+  BOOLEAN                   Match;
+
+  if (DevicePath == NULL) {
+    return FALSE;
+  }
+
+  Match = FALSE;
+
+  //
+  // Search for USB device path node.
+  //
+  TempDevicePath = DevicePath;
+  while (!IsDevicePathEnd (TempDevicePath)) {
+    if ((DevicePathType (TempDevicePath) == MESSAGING_DEVICE_PATH) &&
+        ((DevicePathSubType (TempDevicePath) == MSG_USB_DP))) {
+      Match = TRUE;
+    }
+    TempDevicePath = NextDevicePathNode (TempDevicePath);
+  }
+
+  return Match;
+}
+
 EFI_STATUS
 EFIAPI
 InitDevicePath (
@@ -211,6 +241,10 @@ InitDevicePath (
                     (VOID **) &DevicePath
                     );
     if (EFI_ERROR (Status)) {
+      continue;
+    }
+
+    if (IsUsbDevice (DevicePath)) {
       continue;
     }
 
@@ -782,6 +816,8 @@ ShellAppMain (
     FreePool (mPartData);
     return Status;
   }
+
+  Print (L"GPT operation successfully.\n");
 
   if (Buffer != NULL) {
     FreePool (Buffer);
