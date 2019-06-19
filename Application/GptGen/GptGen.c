@@ -700,6 +700,154 @@ GptCreate (
   return EFI_SUCCESS;
 }
 
+/**
+  Flush the Block Device after GPT table flashed.
+
+  @param[in] PartData             The pointer of parent partition data.
+
+  @retval EFI_SUCCESS             Operation completed successfully.
+  @retval others                  Some error occurs when executing this routine.
+
+**/
+EFI_STATUS
+EFIAPI
+GptSync (
+  IN PARTITON_DATA    *PartData
+  )
+{
+  EFI_STATUS         Status;
+
+  Status = PartData->BlockIo->FlushBlocks (PartData->BlockIo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "Failed to flush block io interface.\n"));
+  }
+
+  return Status;
+}
+
+/**
+  The routine issues dummy read for every physical block device to cause
+  the BlockIo re-installed if media change happened.
+
+  @param[in] VOID
+
+**/
+VOID
+ProbeForMediaChange (
+  VOID
+  )
+{
+  EFI_STATUS                            Status;
+  UINTN                                 HandleCount;
+  EFI_HANDLE                            *Handles;
+  EFI_BLOCK_IO_PROTOCOL                 *BlockIo;
+  UINTN                                 Index;
+
+  gBS->LocateHandleBuffer (
+         ByProtocol,
+         &gEfiBlockIoProtocolGuid,
+         NULL,
+         &HandleCount,
+         &Handles
+         );
+  //
+  // Probe for media change for every physical block io
+  //
+  for (Index = 0; Index < HandleCount; Index++) {
+    Status = gBS->HandleProtocol (
+                    Handles[Index],
+                    &gEfiBlockIoProtocolGuid,
+                    (VOID **) &BlockIo
+                    );
+    if (!EFI_ERROR (Status)) {
+      if (!BlockIo->Media->LogicalPartition) {
+        //
+        // Per spec:
+        //   The function (ReadBlocks) must return EFI_NO_MEDIA or
+        //   EFI_MEDIA_CHANGED even if LBA, BufferSize, or Buffer are invalid so the caller can probe
+        //   for changes in media state.
+        //
+        BlockIo->ReadBlocks (
+                   BlockIo,
+                   BlockIo->Media->MediaId,
+                   0,
+                   0,
+                   NULL
+                   );
+      }
+    }
+  }
+}
+
+/**
+  Re-Enumerate disk partition after GPT table flashed.
+
+  @param[in] PartData             The pointer of parent partition data.
+
+  @retval EFI_SUCCESS             Operation completed successfully.
+  @retval others                  Some error occurs when executing this routine.
+
+**/
+EFI_STATUS
+EFIAPI
+ReEnumeratePartitions (
+  IN PARTITON_DATA    *PartData
+  )
+{
+  EFI_STATUS                 Status;
+  EFI_HANDLE                 Handle;
+  EFI_DEVICE_PATH_PROTOCOL   *TempDevicePath;
+
+  if (PartData == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  //
+  // Flush the Block Device after GPT table flashed.
+  //
+  Status = GptSync (PartData);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "GptSync failed, status: %r.\n", Status));
+    return Status;
+  }
+
+  TempDevicePath = PartData->ParentDevicePath;
+
+  Status = gBS->LocateDevicePath (
+                  &gEfiBlockIoProtocolGuid,
+                  &TempDevicePath,
+                  &Handle
+                  );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "Couldn't locate the handle, status: %r\n", Status));
+    return Status;
+  }
+
+  //
+  // Reinstalls BlockIo protocol interface on a device handle.
+  //
+  Status = gBS->ReinstallProtocolInterface (
+                  Handle,
+                  &gEfiBlockIoProtocolGuid,
+                  PartData->BlockIo,
+                  PartData->BlockIo
+                  );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "ReinstallProtocolInterface failed, status: %r\n", Status));
+    return Status;
+  }
+
+  //
+  // Dummy read for every physical block device to cause the BlockIo
+  // re-installed if media change happened.
+  //
+  ProbeForMediaChange ();
+
+  DEBUG ((DEBUG_INFO, "ReEnumerate partitions successfully.\n"));
+
+  return EFI_SUCCESS;
+}
+
 EFI_STATUS
 EFIAPI
 FlashGpt (
@@ -732,8 +880,14 @@ FlashGpt (
     return Status;
   }
 
-  return EFI_SUCCESS;
+  if (mGptFlash) {
+    Status = ReEnumeratePartitions (PartData);
+    if (EFI_ERROR (Status)) {
+      return Status;
+    }
+  }
 
+  return EFI_SUCCESS;
 }
 
 VOID
