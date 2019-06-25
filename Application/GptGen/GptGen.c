@@ -701,6 +701,219 @@ GptCreate (
 }
 
 /**
+  This routine will read GPT partition table header and validate it.
+
+  @param[in] PartData             The pointer of parent partition data.
+  @param[in] Data                 The pointer of GPT metadata or GPT table.
+  @param[in] Size                 The size of GPT metadata or GPT table.
+
+  @retval TRUE                    The partition table is valid.
+  @retval FALSE                   The partition table is not valid.
+
+**/
+BOOLEAN
+ValidGptTable (
+  IN PARTITON_DATA    *PartData,
+  IN VOID             *Data,
+  IN UINTN            Size
+  )
+{
+  EFI_STATUS                  Status;
+  UINT32                      BlockSize;
+  EFI_PARTITION_TABLE_HEADER  *PartHeader;
+  EFI_PARTITION_TABLE_HEADER  *TempHeader;
+  UINT32                      Crc32;
+  VOID                        *EntriesPtr;
+  UINT64                      EntriesSize;
+
+  BlockSize = PartData->BlockIo->Media->BlockSize;
+  PartHeader = (EFI_PARTITION_TABLE_HEADER *) ((UINT8 *) Data + BlockSize);
+
+  TempHeader = AllocateZeroPool (sizeof (EFI_PARTITION_TABLE_HEADER));
+  if (TempHeader == NULL) {
+    return FALSE;
+  }
+  CopyMem (TempHeader, PartHeader, sizeof (EFI_PARTITION_TABLE_HEADER));
+  TempHeader->Header.CRC32 = 0;
+
+  Status = gBS->CalculateCrc32 (TempHeader, sizeof (EFI_PARTITION_TABLE_HEADER), &Crc32);
+  if (EFI_ERROR (Status)) {
+    FreePool (TempHeader);
+    return FALSE;
+  }
+
+  if ((PartHeader->Header.Signature != EFI_PTAB_HEADER_ID) ||
+      (Crc32 != PartHeader->Header.CRC32) ||
+      (PartHeader->MyLBA != PRIMARY_PART_HEADER_LBA) ||
+      (PartHeader->SizeOfPartitionEntry < sizeof (EFI_PARTITION_ENTRY))
+      ) {
+    DEBUG ((DEBUG_ERROR, "Invalid efi partition table header\n"));
+    FreePool (TempHeader);
+    return FALSE;
+  }
+
+  FreePool (TempHeader);
+
+  //
+  // Ensure the NumberOfPartitionEntries * SizeOfPartitionEntry doesn't overflow.
+  //
+  if (PartHeader->NumberOfPartitionEntries > DivU64x32 (MAX_UINTN, PartHeader->SizeOfPartitionEntry)) {
+    return FALSE;
+  }
+
+  EntriesSize   = PartHeader->NumberOfPartitionEntries * PartHeader->SizeOfPartitionEntry;
+
+  if (Size < (2 * BlockSize + EntriesSize)) {
+    return FALSE;
+  }
+
+  EntriesPtr = (UINT8 *) PartHeader + BlockSize;
+
+  Status = gBS->CalculateCrc32 (EntriesPtr, EntriesSize, &Crc32);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "[ValidGptTable] Partition Entries Crc calculation failed\n"));
+    return FALSE;
+  }
+
+  if (PartHeader->PartitionEntryArrayCRC32 != Crc32) {
+    DEBUG ((DEBUG_ERROR, "Invalid PartitionEntryArrayCRC32\n"));
+    return FALSE;
+  }
+
+  DEBUG ((DEBUG_INFO, "Valid efi partition table header\n"));
+  return TRUE;
+}
+
+/**
+  Get GPT table header and validate it.
+
+  @param[in] PartData             The pointer of parent partition data.
+  @param[in] Data                 The pointer of GPT metadata or GPT table.
+  @param[in] Size                 The size of GPT metadata or GPT table.
+
+  @retval EFI_SUCCESS             Operation completed successfully.
+  @retval others                  Some error occurs when executing this routine.
+
+**/
+EFI_STATUS
+EFIAPI
+GetFullGptHeader (
+  IN PARTITON_DATA    *PartData,
+  IN VOID             *Data,
+  IN UINTN            Size
+  )
+{
+  UINT32           BlockSize;
+
+  BlockSize = PartData->BlockIo->Media->BlockSize;
+
+  if (Size < BlockSize) {
+    return EFI_NOT_FOUND;
+  }
+
+  if (!ValidGptTable (PartData, Data, Size)) {
+    return EFI_NOT_FOUND;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+  Write GPT table RAW data to GPT location directly.
+
+  @param[in] PartData             The pointer of parent partition data.
+  @param[in] Data                 The pointer of GPT table.
+
+  @retval EFI_SUCCESS             Operation completed successfully.
+  @retval others                  Some error occurs when executing this routine.
+
+**/
+EFI_STATUS
+EFIAPI
+WriteGptRaw (
+  IN PARTITON_DATA    *PartData,
+  IN VOID             *Data
+  )
+{
+  EFI_STATUS                  Status;
+  UINT32                      BlockSize;
+  UINTN                       FlashGptSize;
+  UINT64                      EntriesSize;
+  EFI_PARTITION_TABLE_HEADER  *PartHeader;
+
+  BlockSize   = PartData->BlockIo->Media->BlockSize;
+  PartHeader  = (EFI_PARTITION_TABLE_HEADER *) ((UINT8 *) Data + BlockSize);
+  EntriesSize = PartHeader->NumberOfPartitionEntries * PartHeader->SizeOfPartitionEntry;
+
+  //
+  // 1 block for the Protective MBR, 1 block for the Partition Table Header,
+  // and x blocks for the GPT Partition Entry Array.
+  //
+  FlashGptSize = 2 * BlockSize + EntriesSize;
+
+  Status = PartData->DiskIo->WriteDisk (
+             PartData->DiskIo,
+             PartData->BlockIo->Media->MediaId,
+             0,
+             FlashGptSize,
+             Data
+             );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "Write GPT RAW failed\n"));
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+EFI_STATUS
+EFIAPI
+FlashGpt (
+  IN PARTITON_DATA    *PartData,
+  IN VOID             *Data,
+  IN UINTN            Size
+  )
+{
+  EFI_STATUS           Status;
+  GPT_BIN_HEADER       *GpHdr;
+  GPT_BIN_PART         *GpPart;
+
+  if (PartData == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Status = GetFullGptHeader (PartData, Data, Size);
+  if (EFI_ERROR (Status) && (Status != EFI_NOT_FOUND)) {
+    return Status;
+  }
+  if (!EFI_ERROR (Status)) {
+    return WriteGptRaw (PartData, Data);
+  }
+
+  GpHdr  = Data;
+  GpPart = (GPT_BIN_PART *) &GpHdr[1];
+
+  if (Size < sizeof (GPT_BIN_HEADER)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (Size != sizeof (GPT_BIN_HEADER) + (GpHdr->NPart * sizeof (GPT_BIN_PART))) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  if (GpHdr->Magic != GPT_BIN_MAGIC) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Status = GptCreate (PartData, GpPart, GpHdr->StartLba, GpHdr->NPart);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
   Flush the Block Device after GPT table flashed.
 
   @param[in] PartData             The pointer of parent partition data.
@@ -848,48 +1061,6 @@ ReEnumeratePartitions (
   return EFI_SUCCESS;
 }
 
-EFI_STATUS
-EFIAPI
-FlashGpt (
-  IN PARTITON_DATA    *PartData,
-  IN VOID             *Data,
-  IN UINTN            Size
-  )
-{
-  EFI_STATUS           Status;
-  GPT_BIN_HEADER       *GpHdr;
-  GPT_BIN_PART         *GpPart;
-
-  GpHdr = Data;
-  GpPart = (GPT_BIN_PART *) &GpHdr[1];
-
-  if (Size < sizeof (GPT_BIN_HEADER)) {
-    return EFI_INVALID_PARAMETER;
-  }
-
-  if (Size != sizeof (GPT_BIN_HEADER) + (GpHdr->NPart * sizeof (GPT_BIN_PART))) {
-    return EFI_INVALID_PARAMETER;
-  }
-
-  if (GpHdr->Magic != GPT_BIN_MAGIC) {
-    return EFI_INVALID_PARAMETER;
-  }
-
-  Status = GptCreate (PartData, GpPart, GpHdr->StartLba, GpHdr->NPart);
-  if (EFI_ERROR (Status)) {
-    return Status;
-  }
-
-  if (mGptFlash) {
-    Status = ReEnumeratePartitions (PartData);
-    if (EFI_ERROR (Status)) {
-      return Status;
-    }
-  }
-
-  return EFI_SUCCESS;
-}
-
 VOID
 EFIAPI
 ShowHelpInfo (
@@ -969,6 +1140,13 @@ ShellAppMain (
     Print (L"FlashGpt failed. %r\n", Status);
     FreePool (mPartData);
     return Status;
+  }
+
+  if (mGptFlash) {
+    Status = ReEnumeratePartitions (mPartData);
+    if (EFI_ERROR (Status)) {
+      Print (L"ReEnumeratePartitions failed. %r\n", Status);
+    }
   }
 
   Print (L"GPT operation successfully.\n");
