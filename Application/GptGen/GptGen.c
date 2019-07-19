@@ -1069,7 +1069,7 @@ ShowHelpInfo (
 {
   Print (L"Help info:\n");
   Print (L"  GptGen.efi gen gpt.bin (GptPrimary.bin/GptBackup.bin/GptPMbr.bin)\n");
-  Print (L"  GptGen.efi flash gpt.bin\n\n");
+  Print (L"  GptGen.efi flash gpt.bin\n");
   Print (L"  GptGen.efi all gpt.bin\n\n");
 }
 
