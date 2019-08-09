@@ -13,7 +13,7 @@
 
 #include "DumpLog.h"
 
-#define DEBUG_TO_MEMORY_SIG     SIGNATURE_32 ('D','P','R','M')
+#define DEBUG_TO_MEMORY_SIG     SIGNATURE_32 ('R','M','D','P')
 #define LOG_FILE                L"DumpLog.log"
 
 typedef struct {
