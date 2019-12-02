@@ -63,7 +63,7 @@ ShellAppMain (
     return Status;
   }
 
-  if ((!StrCmp (Argv[1], L"w")) || (!StrCmp (Argv[1], L"w"))) {
+  if ((!StrCmp (Argv[1], L"w")) || (!StrCmp (Argv[1], L"W"))) {
 
     ZeroMem (&IshInfo, sizeof (ISH_INFO));
 
