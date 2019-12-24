@@ -51,6 +51,7 @@ ShellAppMain (
                     );
     if (EFI_ERROR (Status)) {
       Print (L"Read ISH variable faile: %r\n", Status);
+      return Status;
     }
 
     Print (L"IshInfo.SlotA_Priority:      0x%x\n", IshInfo.SlotA_Priority);
