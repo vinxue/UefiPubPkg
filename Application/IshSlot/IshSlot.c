@@ -50,7 +50,7 @@ ShellAppMain (
                     (VOID *) &IshInfo
                     );
     if (EFI_ERROR (Status)) {
-      Print (L"Read ISH variable faile: %r\n", Status);
+      Print (L"Read ISH variable failed: %r\n", Status);
       return Status;
     }
 

@@ -22,7 +22,8 @@ ShowHelpInfo (
   Print (L"Help info:\n");
   Print (L"  OtaUpdate.efi [UpdateSlot]\n");
   Print (L"  OtaUpdate.efi 0 - Update Slot A\n");
-  Print (L"  OtaUpdate.efi 1 - Update Slot B\n\n");
+  Print (L"  OtaUpdate.efi 1 - Update Slot B\n");
+  Print (L"  OtaUpdate.efi r - Read Update Flag\n\n");
 }
 
 /**
@@ -58,6 +59,26 @@ ShellAppMain (
 
   ZeroMem (&OtaCapsuleUpdate, sizeof (OTA_CAPSULE_UPDATE));
 
+  if ((!StrCmp (Argv[1], L"r")) || (!StrCmp (Argv[1], L"R"))) {
+    VarSize = sizeof (OTA_CAPSULE_UPDATE);
+    Status = gRT->GetVariable (
+                    OTA_CAPSULE_VAR_NAME,
+                    &OtaCapsuleGuid,
+                    NULL,
+                    &VarSize,
+                    (VOID *) &OtaCapsuleUpdate
+                    );
+    if (EFI_ERROR (Status)) {
+      Print (L"Read OTA update variable failed: %r\n", Status);
+      return Status;
+    }
+
+    Print (L"OtaCapsuleUpdate.UpdateFlag: 0x%x\n", OtaCapsuleUpdate.UpdateFlag);
+    Print (L"OtaCapsuleUpdate.UpdateSlot: 0x%x\n", OtaCapsuleUpdate.UpdateSlot);
+
+    return Status;
+  }
+
   OtaCapsuleUpdate.UpdateFlag = 1;
   OtaCapsuleUpdate.UpdateSlot = (UINT8) StrHexToUintn (Argv[1]);
 
@@ -66,7 +87,6 @@ ShellAppMain (
     return EFI_INVALID_PARAMETER;
   }
 
-  VarSize = sizeof (OTA_CAPSULE_UPDATE);
   Status = gRT->SetVariable (
                   OTA_CAPSULE_VAR_NAME,
                   &OtaCapsuleGuid,
