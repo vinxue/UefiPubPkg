@@ -40,6 +40,33 @@ ShellAppMain (
   UINTN               VarSize;
   EFI_GUID            IshGuid = ISH_GUID;
 
+  if ((!StrCmp (Argv[1], L"s")) || (!StrCmp (Argv[1], L"S"))) {
+    ZeroMem (&IshInfo, sizeof (ISH_INFO));
+
+    IshInfo.SlotA_Priority          = 0xF;
+    IshInfo.SlotA_UpdateRetries     = 0;
+    IshInfo.SlotA_GlitchRetries     = 0xFF;
+    IshInfo.SlotB_Priority          = 0xE;
+    IshInfo.SlotB_UpdateRetries     = 0xFF;
+    IshInfo.SlotB_GlitchRetries     = 0xFF;
+
+    VarSize = sizeof (ISH_INFO);
+    Status = gRT->SetVariable (
+                    ISH_VAR_NAME,
+                    &IshGuid,
+                    EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS | EFI_VARIABLE_NON_VOLATILE,
+                    sizeof (ISH_INFO),
+                    (VOID *) &IshInfo
+                    );
+    if (EFI_ERROR (Status)) {
+      Print (L"Set boot_success failed: %r\n", Status);
+    }
+
+    Print (L"Set boot_success passed: %r\n", Status);
+
+    return Status;
+  }
+
   if ((!StrCmp (Argv[1], L"r")) || (!StrCmp (Argv[1], L"R"))) {
     VarSize = sizeof (ISH_INFO);
     Status = gRT->GetVariable (
@@ -84,7 +111,7 @@ ShellAppMain (
                     (VOID *) &IshInfo
                     );
     if (EFI_ERROR (Status)) {
-      Print (L"Write ISH variable faile: %r\n", Status);
+      Print (L"Write ISH variable failed: %r\n", Status);
     }
 
     Print (L"Write ISH variable passed: %r\n", Status);
