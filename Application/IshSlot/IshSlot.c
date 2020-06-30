@@ -1,7 +1,7 @@
 /** @file
   A UEFI tool for ISH Slot setting.
 
-  Copyright (c) 2019, Gavin Xue. All rights reserved.<BR>
+  Copyright (c) 2019 - 2020, Gavin Xue. All rights reserved.<BR>
   This program and the accompanying materials
   are licensed and made available under the terms and conditions of the BSD License
   which accompanies this distribution.  The full text of the license may be found at
@@ -13,6 +13,17 @@
 
 #include "IshSlot.h"
 
+VOID
+EFIAPI
+ShowHelpInfo (
+  VOID
+  )
+{
+  Print (L"Help info:\n");
+  Print (L"  IshSlot.efi s - Set boot_success flag\n");
+  Print (L"  IshSlot.efi r - Dump ISH slot info\n");
+  Print (L"  IshSlot.efi w [Priority_A] [Retries_A] [Priority_B] [Retries_B]\n\n");
+}
 
 /**
   UEFI application entry point which has an interface similar to a
@@ -39,6 +50,11 @@ ShellAppMain (
   ISH_INFO            IshInfo;
   UINTN               VarSize;
   EFI_GUID            IshGuid = ISH_GUID;
+
+  if (Argc == 1) {
+    ShowHelpInfo ();
+    return EFI_INVALID_PARAMETER;
+  }
 
   if ((!StrCmp (Argv[1], L"s")) || (!StrCmp (Argv[1], L"S"))) {
     ZeroMem (&IshInfo, sizeof (ISH_INFO));
