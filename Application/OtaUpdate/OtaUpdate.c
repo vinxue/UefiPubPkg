@@ -21,9 +21,9 @@ ShowHelpInfo (
 {
   Print (L"Help info:\n");
   Print (L"  OtaUpdate.efi [UpdateSlot]\n");
-  Print (L"  OtaUpdate.efi 0 - Update Slot A\n");
-  Print (L"  OtaUpdate.efi 1 - Update Slot B\n");
-  Print (L"  OtaUpdate.efi r - Read Update Flag\n\n");
+  Print (L"  OtaUpdate.efi a - Update Slot A\n");
+  Print (L"  OtaUpdate.efi b - Update Slot B\n");
+  Print (L"  OtaUpdate.efi r - Read Update Flag / active slot\n\n");
 }
 
 /**
@@ -100,10 +100,13 @@ ShellAppMain (
   }
 
   OtaCapsuleUpdate.UpdateFlag = 1;
-  OtaCapsuleUpdate.UpdateSlot = (UINT8) StrHexToUintn (Argv[1]);
 
-  if (OtaCapsuleUpdate.UpdateSlot > 1) {
-    Print (L"Invalid Update Slot Number.\n");
+  if ((!StrCmp (Argv[1], L"a")) || (!StrCmp (Argv[1], L"A"))) {
+    OtaCapsuleUpdate.UpdateSlot = 0;
+  } else if ((!StrCmp (Argv[1], L"b")) || (!StrCmp (Argv[1], L"B"))) {
+    OtaCapsuleUpdate.UpdateSlot = 1;
+  } else {
+    Print (L"Invalid Update Slot.\n");
     return EFI_INVALID_PARAMETER;
   }
 
