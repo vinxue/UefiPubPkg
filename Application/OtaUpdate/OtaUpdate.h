@@ -46,4 +46,23 @@ typedef struct {
 //
 #define OTA_CAPSULE_VAR_NAME          L"OtaCapsuleVar"
 
+#define ISH_GUID \
+  { \
+    0x8b31a9f9, 0x208f, 0x4b26, { 0x93, 0xd9, 0x31, 0xaa, 0x76, 0xa6, 0x8d, 0x86 } \
+  }
+
+//
+// Image Slot Header (ISH) for boot slot
+//
+#define ISH_VAR_NAME               L"IshVar"
+
+typedef struct {
+  UINT32       SlotA_Priority;
+  UINT32       SlotA_UpdateRetries;
+  UINT32       SlotA_GlitchRetries;
+  UINT32       SlotB_Priority;
+  UINT32       SlotB_UpdateRetries;
+  UINT32       SlotB_GlitchRetries;
+} ISH_INFO;
+
 #endif

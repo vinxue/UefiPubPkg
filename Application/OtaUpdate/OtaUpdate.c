@@ -51,6 +51,8 @@ ShellAppMain (
   OTA_CAPSULE_UPDATE  OtaCapsuleUpdate;
   UINTN               VarSize;
   EFI_GUID            OtaCapsuleGuid = OTA_CAPSULE_GUID;
+  ISH_INFO            IshInfo;
+  EFI_GUID            IshGuid = ISH_GUID;
 
   if (Argc != 2) {
     ShowHelpInfo ();
@@ -70,11 +72,29 @@ ShellAppMain (
                     );
     if (EFI_ERROR (Status)) {
       Print (L"Read OTA update variable failed: %r\n", Status);
+    } else {
+      Print (L"OtaCapsuleUpdate.UpdateFlag: 0x%x\n", OtaCapsuleUpdate.UpdateFlag);
+      Print (L"OtaCapsuleUpdate.UpdateSlot: 0x%x\n", OtaCapsuleUpdate.UpdateSlot);
+    }
+
+    VarSize = sizeof (ISH_INFO);
+    Status = gRT->GetVariable (
+                    ISH_VAR_NAME,
+                    &IshGuid,
+                    NULL,
+                    &VarSize,
+                    (VOID *) &IshInfo
+                    );
+    if (EFI_ERROR (Status)) {
+      Print (L"Read ISH variable failed: %r\n", Status);
       return Status;
     }
 
-    Print (L"OtaCapsuleUpdate.UpdateFlag: 0x%x\n", OtaCapsuleUpdate.UpdateFlag);
-    Print (L"OtaCapsuleUpdate.UpdateSlot: 0x%x\n", OtaCapsuleUpdate.UpdateSlot);
+    if (IshInfo.SlotA_Priority > IshInfo.SlotB_Priority) {
+      Print (L"Current active Slot is: a\n");
+    } else {
+      Print (L"Current active Slot is: b\n");
+    }
 
     return Status;
   }
