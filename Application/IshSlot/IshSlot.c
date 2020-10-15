@@ -128,6 +128,7 @@ ShellAppMain (
                     );
     if (EFI_ERROR (Status)) {
       Print (L"Write ISH variable failed: %r\n", Status);
+      return Status;
     }
 
     Print (L"Write ISH variable passed: %r\n", Status);
